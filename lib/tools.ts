@@ -11,6 +11,8 @@ import {
   preauthorizeRefund,
   notifyReturnInProcess,
 } from "@/lib/api";
+import { start } from "workflow/api";
+import { returnFlow } from "./workflows/return-flow";
 
 export const searchProducts = tool({
   description: `Search the Vercel swag store product catalog. Use this whenever the user asks about products, what the store sells, or wants recommendations. Optionally narrow results to a single category. This is a broad lookup returning a short summary per product; for full details on one specific item, use getProductDetails instead.`,
@@ -29,6 +31,7 @@ export const searchProducts = tool({
       ),
   }),
   execute: async ({ query, category }) => {
+    "use step";
     try {
       const products = await getProducts({
         search: query,
@@ -60,6 +63,7 @@ export const getAllCategories = tool({
   description: `List every product category available in the Vercel swag store, along with the number of products in each. Use this when the user asks what categories exist, what kinds of products are sold, or wants to browse the store at a high level.`,
   inputSchema: z.object({}),
   execute: async () => {
+    "use step";
     try {
       const categories = await getCategories();
       return {
@@ -88,6 +92,7 @@ export const getProductDetails = tool({
       ),
   }),
   execute: async ({ idOrSlug }) => {
+    "use step";
     try {
       const [product, stock] = await Promise.all([
         getProductById(idOrSlug),
@@ -135,23 +140,8 @@ export const returnOrder = tool({
       .describe("Why the user is returning the order."),
   }),
   execute: async ({ orderId, reason }) => {
-    try {
-      const order = await getOrder(orderId);
-      await notifyReturnInProcess(orderId);
-      await preauthorizeRefund(orderId);
-      const filed = await createReturn({
-        orderId: order.id,
-        items: order.items.map((i) => ({
-          productId: i.productId,
-          quantity: i.quantity,
-        })),
-        reason,
-      });
-      return { returnId: filed.id, status: filed.status };
-    } catch (err) {
-      const message =
-        err instanceof ApiRequestError ? err.message : "Unknown error";
-      return { error: message };
-    }
+    "use step";
+    const run = await start(returnFlow, [orderId, reason]);
+    return { runId: run.runId, message: `Return request received for order ${orderId}.` };
   },
 });

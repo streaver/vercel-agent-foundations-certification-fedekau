@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import { start } from "workflow/api";
 import { returnFlow } from "./workflows/return-flow";
+import { createOrGetSandbox, SANDBOX_NAME } from "@/lib/sandbox";
 
 export const searchProducts = tool({
   description: `Search the Vercel swag store product catalog. Use this whenever the user asks about products, what the store sells, or wants recommendations. Optionally narrow results to a single category. This is a broad lookup returning a short summary per product; for full details on one specific item, use getProductDetails instead.`,
@@ -317,5 +318,22 @@ export const getSalesAnalytics = tool({
         err instanceof ApiRequestError ? err.message : "Unknown error";
       return { count: 0, sales: [], error: message };
     }
+  },
+});
+
+export const bash = tool({
+  description: "Run a bash command in the sandbox environment",
+  inputSchema: z.object({
+    command: z.string().describe("The bash command to run"),
+  }),
+  execute: async ({ command }) => {
+    "use step";
+    const sandbox = await createOrGetSandbox(SANDBOX_NAME);
+    const result = await sandbox.runCommand("bash", ["-lc", command]);
+    return {
+      stdout: await result.stdout(),
+      stderr: await result.stderr(),
+      exitCode: result.exitCode,
+    };
   },
 });
